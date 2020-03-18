@@ -1,0 +1,6 @@
+.git/
+.idea/
+target/
+/src/test/
+/src/main/resources/
+Client.iml
