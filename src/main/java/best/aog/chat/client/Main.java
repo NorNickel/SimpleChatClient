@@ -12,32 +12,51 @@ public class Main {
         BufferedReader console = new BufferedReader(new InputStreamReader(System.in));
         try {
             Socket socket = new Socket(IP, PORT);
-            System.out.print("Введите логин: ");
-            String login = console.readLine();
-            System.out.print("Введите пароль: ");
-            String password = console.readLine();
-            Client client = new Client(login, password);
-            System.out.println(client.toJSON());
 
-            new Thread(() -> {
+            new Thread(() ->{
                 try {
-                    ObjectOutputStream outputStream =
-                            new ObjectOutputStream(socket.getOutputStream());
-                    outputStream.writeObject(client);
-                    outputStream.flush();
-                    PrintWriter writer = new PrintWriter(socket.getOutputStream());
+                    BufferedReader serverReader = new BufferedReader(
+                            new InputStreamReader(socket.getInputStream()));
                     while (true) {
-                        String message = console.readLine();
-                    //writer.write(client.toJSON());
-                        writer.write(message);
-                        writer.flush();
+                        System.out.println(serverReader.readLine());
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }).start();
 
-        } catch (IOException e) {
+
+            while(true){
+                Thread t = new Thread(() -> {
+                    try {
+                        //ObjectOutputStream outputStream =
+                        //        new ObjectOutputStream(socket.getOutputStream());
+                        //outputStream.writeObject(client);
+                        //outputStream.flush();
+                        PrintWriter writer = new PrintWriter(socket.getOutputStream());
+                        while (true) {
+                            String message = console.readLine();
+                            //writer.write(client.toJSON());
+                            writer.println(message);
+                            writer.flush();
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+                t.start();
+                t.join();
+            }
+
+            /*System.out.print("Введите логин: ");
+            String login = console.readLine();
+            System.out.print("Введите пароль: ");
+            String password = console.readLine();
+            Client client = new Client(login, password);
+            System.out.println(client.toJSON());
+
+             */
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }
