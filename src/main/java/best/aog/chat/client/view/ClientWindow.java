@@ -8,7 +8,11 @@ import best.aog.chat.client.model.messages.Message;
 import best.aog.chat.client.model.messages.MessageResultType;
 import best.aog.chat.client.model.messages.MessageType;
 import best.aog.chat.client.model.messages.Messages;
+import best.aog.chat.client.model.messages.client.PrivateMessageBody;
 import best.aog.chat.client.model.messages.client.RegularMessageBody;
+import best.aog.chat.client.model.messages.server.AddUserMessageBody;
+import best.aog.chat.client.model.messages.server.AllUsersMessageBody;
+import best.aog.chat.client.model.messages.server.RemoveUserMessageBody;
 import best.aog.chat.client.model.messages.server.ResultMessageBody;
 import com.google.gson.Gson;
 
@@ -16,9 +20,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class ClientWindow extends JFrame implements TCPConnectionListener {
 
@@ -32,45 +37,63 @@ public class ClientWindow extends JFrame implements TCPConnectionListener {
     }
 
     private User user = null;
+
     private final static Gson gson = new Gson();
 
     private final JTextArea areaChat = new JTextArea();
-    private final JTextField fieldInput = new JTextField();
+    private final JTextField fieldInput = new JTextField(50);
 
     private JPanel panelAuth = new JPanel();
     private JTextField fieldLogin = new JTextField(10);
     private JPasswordField fieldPassword = new JPasswordField(10);
+    private JLabel infoLabel = new JLabel("Введите логин и пароль");
     private JButton buttonAuthorize = new JButton("Войти");
+    private JButton buttonRegister = new JButton("Зарегистрироваться");
 
+    private List<User> connectedUsers = new ArrayList<User>();
+    private DefaultListModel connectedUsersModel = new DefaultListModel();
+    private JList listConnectedUsers = new JList(connectedUsersModel);
 
-    JLabel infoLabel = new JLabel("Введите логин и пароль");
-    JLabel buttonRegister = new JLabel("<html><u>Зарегистрироваться</u></html>"); // button as JLabel
+    private JPanel panelSend = new JPanel();
+    private DefaultComboBoxModel connectedUserCombo = new DefaultComboBoxModel();
+    private JComboBox comboAllUsers = new JComboBox(connectedUserCombo);
 
     private TCPConnection connection;
     private boolean isAuthorized = false;
 
     private ClientWindow() {
+        setTitle("Simple Chat by AOG (ver. 1.0)");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        setSize(600, 400);
+        setSize(700, 400);
         setLocationRelativeTo(null);
 
         areaChat.setEditable(false);
         areaChat.setLineWrap(true); // автоматический перенос слов
-        add(areaChat, BorderLayout.CENTER);
+        getContentPane().add(new JScrollPane(areaChat), BorderLayout.CENTER);
 
-        add(fieldInput, BorderLayout.SOUTH);
-        fieldInput.addActionListener(new SendActionListener());
+        //getContentPane().add(fieldInput, BorderLayout.SOUTH);
+        //fieldInput.addActionListener(new SendActionListener());
 
         panelAuth.add(infoLabel);
         panelAuth.add(fieldLogin);
         panelAuth.add(fieldPassword);
         buttonAuthorize.addActionListener(new ButtonAuthorizeListener());
         panelAuth.add(buttonAuthorize);
+        buttonRegister.addActionListener(new ButtonRegisterListener());
         panelAuth.add(buttonRegister);
-        buttonRegister.addMouseListener(new ButtonRegisterListener());
 
+        getContentPane().add(panelAuth, BorderLayout.NORTH);
 
-        add(panelAuth, BorderLayout.NORTH);
+        getContentPane().add(new JScrollPane(listConnectedUsers), BorderLayout.EAST);
+
+        connectedUserCombo.addElement("Отправить всем:");
+        panelSend.add(comboAllUsers, BorderLayout.WEST);
+        fieldInput.addActionListener(new SendActionListener());
+        panelSend.add(fieldInput, BorderLayout.EAST);
+
+        getContentPane().add(panelSend, BorderLayout.SOUTH);
+
+        System.out.println(comboAllUsers.getSelectedItem());
 
         setVisible(true);
 
@@ -104,18 +127,58 @@ public class ClientWindow extends JFrame implements TCPConnectionListener {
             ResultMessageBody resBody = (ResultMessageBody)message.getMessageBody();
             if (resBody.getResult() == MessageResultType.ACCEPT) {
                 printString("Регистрация/авторизация успешна");
+                user = new User(fieldLogin.getText(), String.valueOf(fieldPassword.getPassword()));
             } else {
                 printString("Регистрация/авторизация не успешна: " + resBody.getMessage());
             }
         } else if (message.getMessageType() == MessageType.REGULAR_MESSAGE) {
             RegularMessageBody regBody = (RegularMessageBody)message.getMessageBody();
-            printString(regBody.getUser().getLogin() + ": " + regBody.getMessage());
+            String loginFrom = regBody.getUser().getLogin();
+            String from = (loginFrom.equals(user.getLogin()) ? "YOU" : loginFrom);
+            printString(from + ": " + regBody.getMessage());
+        } else if (message.getMessageType() == MessageType.ALL_USERS) {
+            AllUsersMessageBody body = (AllUsersMessageBody)message.getMessageBody();
+            addConnectedUsers(body.getLogin());
+        }else if (message.getMessageType() == MessageType.USER_ADDED) {
+            AddUserMessageBody body = (AddUserMessageBody)message.getMessageBody();
+            addConnectedUser(body.getUserName());
+        }else if (message.getMessageType() == MessageType.USER_REMOVED) {
+            RemoveUserMessageBody body = (RemoveUserMessageBody)message.getMessageBody();
+            removeConnectedUser(body.getUserName());
+        } else if (message.getMessageType() == MessageType.PRIVATE) {
+            PrivateMessageBody body = (PrivateMessageBody)message.getMessageBody();
+            String loginFrom = body.getUserName();
+            String from = (loginFrom.equals(user.getLogin()) ? "YOU: [PRIVATE to " + body.getReceiverUserName() + "]" : loginFrom + " [PRIVATE]");
+            printString(from + ": " + body.getMessage());
+        }
+
+    }
+
+    public void addConnectedUser(String userName) {
+        connectedUsersModel.addElement(userName);
+        if (userName != user.getLogin()) {
+            connectedUserCombo.addElement(userName);
         }
     }
 
+    public void addConnectedUsers(String[] userNames) {
+        connectedUsersModel.addAll(Arrays.asList(userNames));
+        connectedUserCombo.addAll(Arrays.asList(userNames));
+    }
+
+    public void removeConnectedUser(String userName) {
+        connectedUsersModel.removeElement(userName);
+        if (connectedUserCombo.getSelectedItem().equals(userName)) {
+            connectedUserCombo.setSelectedItem("Отправить всем:");
+        }
+        connectedUserCombo.removeElement(userName);
+        printString("Нас покинул " + userName);
+    }
+
+
     @Override
     public void onException(TCPConnection connection, Exception e) {
-
+        printString("Ошибка: " + e);
     }
 
     class SendActionListener implements ActionListener {
@@ -124,51 +187,30 @@ public class ClientWindow extends JFrame implements TCPConnectionListener {
             String text = fieldInput.getText();
             if (text.equals("")) return;
             fieldInput.setText("");
-            connection.sendMessage(Messages.createRegularMessage(user, text, null));
+
+            if (comboAllUsers.getSelectedItem().equals("Отправить всем:")) {
+                connection.sendMessage(Messages.createRegularMessage(user, text));
+            } else {
+                connection.sendMessage(
+                        Messages.createPrivateMessage(user.getLogin(), text, (String) comboAllUsers.getSelectedItem()));
+            }
         }
     }
 
-    class RegisterActionListener implements ActionListener {
+    class ButtonRegisterListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
             user = new User(fieldLogin.getText(), String.valueOf(fieldPassword.getPassword()));
             connection.sendMessage(Messages.createRegisterMessage(user));
-        }
-    }
-
-    class ButtonRegisterListener implements MouseListener {
-
-        @Override
-        public void mouseClicked(MouseEvent e) {
-            printString("mouse clicked");
-        }
-
-        @Override
-        public void mousePressed(MouseEvent e) {
-            printString("mouse pressed");
-        }
-
-        @Override
-        public void mouseReleased(MouseEvent e) {
-            printString("mouse released");
-        }
-
-        @Override
-        public void mouseEntered(MouseEvent e) {
-            printString("mouse entered");
-        }
-
-        @Override
-        public void mouseExited(MouseEvent e) {
-            printString("mouse exited");
         }
     }
 
     class ButtonAuthorizeListener implements ActionListener {
         @Override
         public void actionPerformed(ActionEvent e) {
-            user = new User(fieldLogin.getText(), String.valueOf(fieldPassword.getPassword()));
-            connection.sendMessage(Messages.createRegisterMessage(user));
+            String authorizeMessage = Messages.createAuthorizeMessage(
+                    fieldLogin.getText(), String.valueOf(fieldPassword.getPassword()));
+            connection.sendMessage(authorizeMessage);
         }
     }
 

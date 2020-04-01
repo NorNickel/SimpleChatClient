@@ -51,6 +51,11 @@ public class TCPConnection {
     }
 
     public synchronized void disconnect() {
-        eventListener.onDisconnect(TCPConnection.this);
+        receiveThread.interrupt();
+        try {
+            socket.close();
+        } catch (IOException e) {
+            eventListener.onException(TCPConnection.this, e);
+        }
     }
-}
+} //???!!!
