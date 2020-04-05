@@ -1,4 +1,4 @@
-package best.aog.chat.client.controller;
+package best.aog.chat.client.net;
 
 public interface TCPConnectionListener {
     void onConnectionReady(TCPConnection connection);
